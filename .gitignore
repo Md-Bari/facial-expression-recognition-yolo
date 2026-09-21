@@ -1,0 +1,11 @@
+# Dataset, run outputs and model weights (not tracked)
+outputs/
+weights/
+*.pt
+*.onnx
+*.npz
+
+# Python
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
