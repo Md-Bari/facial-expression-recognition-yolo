@@ -20,3 +20,34 @@ Usage
 """
 from __future__ import annotations
 
+import argparse
+import random
+from pathlib import Path
+
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+import numpy as np
+import torch
+import torch.nn.functional as F
+from PIL import Image
+
+ROOT = Path(__file__).resolve().parent
+IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
+
+
+def parse_args():
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--model", default=str(ROOT / "outputs" / "yolo11l" / "runs" / "yolo11l_70_15_15" / "weights" / "best.pt"))
+    ap.add_argument("--dataset", default=str(ROOT / "outputs" / "_shared_work" / "dataset"))
+    ap.add_argument("--split", default="test")
+    ap.add_argument("--out", default=str(ROOT / "outputs" / "explanations"))
+    ap.add_argument("--images", nargs="*", default=None, help="explain these image files instead of sampling the dataset")
+    ap.add_argument("--examples-per-class", type=int, default=6)
+    ap.add_argument("--mean-per-class", type=int, default=150, help="images averaged per class for the mean map")
+    ap.add_argument("--imgsz", type=int, default=256)
+    ap.add_argument("--patch", type=int, default=48, help="occlusion patch size in pixels")
+    ap.add_argument("--stride", type=int, default=16, help="occlusion stride in pixels")
+    ap.add_argument("--seed", type=int, default=0)
+    return ap.parse_args()
+
