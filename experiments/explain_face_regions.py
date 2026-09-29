@@ -51,3 +51,32 @@ def parse_args():
     ap.add_argument("--seed", type=int, default=0)
     return ap.parse_args()
 
+
+def load(path, s):
+    """Same preprocessing as Ultralytics classify inference: short side -> s, centre crop, RGB in [0, 1]."""
+    with Image.open(path) as im:
+        im = im.convert("RGB")
+        w, h = im.size
+        r = s / min(w, h)
+        nw, nh = max(s, round(w * r)), max(s, round(h * r))
+        im = im.resize((nw, nh), Image.BILINEAR)
+        l, t = (nw - s) // 2, (nh - s) // 2
+        arr = np.asarray(im.crop((l, t, l + s, t + s)), dtype=np.float32) / 255
+    return torch.from_numpy(arr).permute(2, 0, 1)
+
+
+class Explainer:
+    def __init__(self, model_path):
+        from ultralytics import YOLO
+
+        yolo = YOLO(model_path)
+        self.names = [yolo.names[i] for i in range(len(yolo.names))]
+        self.model = yolo.model.float().eval().cuda()
+        for p in self.model.parameters():
+            p.requires_grad_(False)
+        self.head = self.model.model[-1]
+        # last conv feature map before global pooling (falls back to the layer feeding the head)
+        target = self.head.conv if hasattr(self.head, "conv") else self.model.model[-2]
+        self.act = None
+        target.register_forward_hook(lambda m, i, o: setattr(self, "act", o))
+
