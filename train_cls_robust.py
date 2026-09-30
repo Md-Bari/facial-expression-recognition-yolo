@@ -52,3 +52,26 @@ p.add_argument("--audit_csv", default=str(ROOT / "outputs" / "yolov8m_finetuned"
 p.add_argument("--out", default=str(ROOT / "outputs" / "ensemble_runs"))
 a = p.parse_args()
 
+torch.manual_seed(a.seed)
+np.random.seed(a.seed)
+torch.backends.cudnn.benchmark = True
+RUN = Path(a.out) / a.name
+(RUN / "weights").mkdir(parents=True, exist_ok=True)
+json.dump(vars(a), open(RUN / "args.json", "w"), indent=2)
+
+
+# ---------------------------------------------------------------- data
+def build_index(dataset: Path, split_csv: Path) -> pd.DataFrame:
+    rows = []
+    for split in ("train", "val", "test"):
+        for li, cname in enumerate(CLASS_NAMES):
+            for f in sorted((dataset / split / cname).iterdir()):
+                if f.suffix.lower() in {".jpg", ".jpeg", ".png", ".bmp", ".webp"}:
+                    rows.append((str(f), split, li, int(f.name.split("_")[0])))
+    df = pd.DataFrame(rows, columns=["crop_path", "split", "y", "idx"])
+    src = pd.read_csv(split_csv).reset_index().rename(columns={"index": "idx"})
+    df = df.merge(src[["idx", "split"]], on="idx", suffixes=("", "_src"), validate="1:1")
+    assert (df.split == df.split_src).all(), "dataset folder does not match split.csv"
+    return df.drop(columns=["split_src"])
+
+
