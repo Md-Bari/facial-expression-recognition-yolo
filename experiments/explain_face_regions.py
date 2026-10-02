@@ -80,3 +80,25 @@ class Explainer:
         self.act = None
         target.register_forward_hook(lambda m, i, o: setattr(self, "act", o))
 
+    def scores(self, x):
+        """Returns (probabilities, logits) for a batch."""
+        o = self.model(x)
+        if isinstance(o, (tuple, list)):
+            a, b = o[0], o[1]
+            probs, logits = (a, b) if torch.allclose(a.sum(1), torch.ones_like(a[:, 0]), atol=1e-3) else (b, a)
+            return probs, logits
+        return o, torch.log(o.clamp_min(1e-9))
+
+    def gradcam(self, x):
+        """x: B,3,S,S on GPU. Returns (cam B,S,S in [0,1], predicted class, probability)."""
+        x = x.clone().requires_grad_(True)
+        probs, logits = self.scores(x)
+        cls = probs.argmax(1)
+        act = self.act
+        grads = torch.autograd.grad(logits.gather(1, cls[:, None]).sum(), act)[0]
+        weights = grads.mean(dim=(2, 3), keepdim=True)
+        cam = F.relu((weights * act).sum(1, keepdim=True))
+        cam = F.interpolate(cam, size=x.shape[-2:], mode="bilinear", align_corners=False)[:, 0]
+        cam = cam / cam.amax(dim=(1, 2), keepdim=True).clamp_min(1e-9)
+        return cam.detach().cpu().numpy(), cls.cpu().numpy(), probs.detach().gather(1, cls[:, None])[:, 0].cpu().numpy()
+
