@@ -75,3 +75,36 @@ def build_index(dataset: Path, split_csv: Path) -> pd.DataFrame:
     return df.drop(columns=["split_src"])
 
 
+def load_image(path_size):
+    path, s = path_size
+    with Image.open(path) as im:
+        im = im.convert("RGB")
+        w, h = im.size
+        r = s / min(w, h)
+        nw, nh = max(s, round(w * r)), max(s, round(h * r))
+        im = im.resize((nw, nh), Image.BILINEAR)
+        l, t = (nw - s) // 2, (nh - s) // 2
+        return np.asarray(im.crop((l, t, l + s, t + s)), dtype=np.uint8)
+
+
+df = build_index(Path(a.dataset), Path(a.split_csv))
+t0 = time.time()
+with ThreadPoolExecutor(12) as ex:
+    arrs = list(ex.map(load_image, [(q, a.imgsz) for q in df.crop_path]))
+X = torch.from_numpy(np.stack(arrs)).permute(0, 3, 1, 2).contiguous().pin_memory()
+del arrs
+print(f"loaded {len(df)} images at {a.imgsz}px in {time.time() - t0:.0f}s ({X.numel() / 1e9:.1f} GB, pinned CPU)",
+      flush=True)
+Y = df.y.values.astype(np.int64)
+idx_tr, idx_va, idx_te = (np.where(df.split.values == s)[0] for s in ("train", "val", "test"))
+audit = pd.read_csv(a.audit_csv)
+flag = df.idx.map(audit.set_index("idx").flagged).fillna(False).values.astype(bool)
+tr_clean, va_clean = idx_tr[~flag[idx_tr]], idx_va[~flag[idx_va]]
+print(f"train {len(idx_tr)} -> {len(tr_clean)} | val {len(idx_va)} -> {len(va_clean)}", flush=True)
+
+
+def fetch(idx):
+    """uint8 CPU rows -> float GPU batch in [0,1]."""
+    idx = torch.as_tensor(np.asarray(idx), dtype=torch.long)
+    return X.index_select(0, idx).pin_memory().cuda(non_blocking=True).float().div_(255)
+
