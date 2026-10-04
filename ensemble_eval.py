@@ -26,3 +26,31 @@ yv, yt = ref["y_val"], ref["y_test"]
 for d in members.values():
     assert (d["val_idx"] == ref["val_idx"]).all() and (d["test_idx"] == ref["test_idx"]).all()
 
+acc = lambda p, y, m=None: float((p.argmax(1) == y)[slice(None) if m is None else m].mean())
+
+# per member: flip-TTA chosen on validation
+view = {}
+rows = []
+for n, d in members.items():
+    view[n] = "_flip" if acc(d["val_flip"], yv) > acc(d["val"], yv) else ""
+    rows.append({"member": n, "val": acc(d["val"], yv), "val_flip": acc(d["val_flip"], yv), "tta": bool(view[n]),
+                 "test_all": acc(d["test" + view[n]], yt)})
+print(pd.DataFrame(rows).round(4).to_string(index=False))
+
+# greedy forward selection with replacement (Caruana et al., 2004) on validation log-likelihood + accuracy
+V = {n: d["val" + view[n]] for n, d in members.items()}
+T = {n: d["test" + view[n]] for n, d in members.items()}
+score = lambda p: (acc(p, yv), float(np.log(np.clip(p[np.arange(len(yv)), yv], 1e-9, 1)).mean()))
+chosen, cur = [], None
+for _ in range(10):
+    best = max(V, key=lambda n: score(V[n] if cur is None else (cur * len(chosen) + V[n]) / (len(chosen) + 1)))
+    new = V[best] if cur is None else (cur * len(chosen) + V[best]) / (len(chosen) + 1)
+    if cur is not None and score(new) <= score(cur):
+        break
+    chosen.append(best)
+    cur = new
+w = pd.Series(chosen).value_counts() / len(chosen)
+print("\nselected on validation:", w.round(3).to_dict(), "| val acc", round(acc(cur, yv), 4))
+pt = sum(T[n] * wi for n, wi in w.items())
+pt_all = sum(T.values()) / len(T)
+
