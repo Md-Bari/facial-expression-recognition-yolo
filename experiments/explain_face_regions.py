@@ -102,3 +102,30 @@ class Explainer:
         cam = cam / cam.amax(dim=(1, 2), keepdim=True).clamp_min(1e-9)
         return cam.detach().cpu().numpy(), cls.cpu().numpy(), probs.detach().gather(1, cls[:, None])[:, 0].cpu().numpy()
 
+    @torch.no_grad()
+    def occlusion(self, x, cls, patch, stride):
+        """x: 3,S,S. Map of the drop in p(cls) when each region is covered by a grey patch."""
+        S = x.shape[-1]
+        base = self.scores(x[None])[0][0, cls].item()
+        pos = [(t, l) for t in range(0, S - patch + 1, stride) for l in range(0, S - patch + 1, stride)]
+        drop, count = torch.zeros(S, S, device=x.device), torch.zeros(S, S, device=x.device)
+        for i in range(0, len(pos), 64):
+            chunk = pos[i:i + 64]
+            xb = x[None].repeat(len(chunk), 1, 1, 1)
+            for j, (t, l) in enumerate(chunk):
+                xb[j, :, t:t + patch, l:l + patch] = 0.5
+            p = self.scores(xb)[0][:, cls]
+            for (t, l), pj in zip(chunk, p):
+                drop[t:t + patch, l:l + patch] += base - pj
+                count[t:t + patch, l:l + patch] += 1
+        m = (drop / count.clamp_min(1)).clamp_min(0)
+        return (m / m.max().clamp_min(1e-9)).cpu().numpy()
+
+
+def overlay(ax, img, heat, title):
+    ax.imshow(img)
+    ax.imshow(heat, cmap="jet", alpha=0.45, vmin=0, vmax=1)
+    ax.set_title(title, fontsize=9)
+    ax.axis("off")
+
+
