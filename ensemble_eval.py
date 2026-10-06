@@ -54,3 +54,22 @@ print("\nselected on validation:", w.round(3).to_dict(), "| val acc", round(acc(
 pt = sum(T[n] * wi for n, wi in w.items())
 pt_all = sum(T.values()) / len(T)
 
+
+def report(y, p, mask=None):
+    if mask is not None:
+        y, p = y[mask], p[mask]
+    pred = p.argmax(1)
+    cm = confusion_matrix(y, pred, labels=range(len(CLASS_NAMES)))
+    return {"images": int(len(y)), "accuracy": float((pred == y).mean()),
+            "macro_f1": float(f1_score(y, pred, average="macro")),
+            "per_class_accuracy": {c: float(cm[i, i] / max(1, cm[i].sum())) for i, c in enumerate(CLASS_NAMES)},
+            "confusion_matrix": cm.tolist()}
+
+
+corr = pd.read_csv(ROOT / "outputs" / "label_review" / "label_corrections.csv").set_index("idx")
+di = pd.Series(ref["dataset_idx_test"])
+action = di.map(corr.action).fillna("keep").values
+y_corr = np.array([CLASS_NAMES.index(nl) if ac == "relabel" else y
+                   for ac, nl, y in zip(action, di.map(corr.new_label).values, yt)])
+keep = action != "remove"
+
