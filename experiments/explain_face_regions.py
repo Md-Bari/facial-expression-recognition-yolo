@@ -129,3 +129,35 @@ def overlay(ax, img, heat, title):
     ax.axis("off")
 
 
+def figure_for(ex, paths, labels, a, save_path, suptitle):
+    x = torch.stack([load(p, a.imgsz) for p in paths]).cuda()
+    cams, cls, prob = ex.gradcam(x)
+    fig, axes = plt.subplots(len(paths), 3, figsize=(8.4, 2.9 * len(paths)), squeeze=False)
+    for i, p in enumerate(paths):
+        img = x[i].permute(1, 2, 0).cpu().numpy()
+        occ = ex.occlusion(x[i], int(cls[i]), a.patch, a.stride)
+        true = f"label: {labels[i]}\n" if labels[i] else ""
+        axes[i, 0].imshow(img)
+        axes[i, 0].set_title(f"{true}pred: {ex.names[cls[i]]} ({prob[i]:.2f})", fontsize=9)
+        axes[i, 0].axis("off")
+        overlay(axes[i, 1], img, cams[i], "Grad-CAM")
+        overlay(axes[i, 2], img, occ, "Occlusion sensitivity")
+    fig.suptitle(suptitle, fontsize=11)
+    fig.tight_layout()
+    fig.savefig(save_path, dpi=110)
+    plt.close(fig)
+    print("saved", save_path)
+
+
+def main():
+    a = parse_args()
+    rng = random.Random(a.seed)
+    out = Path(a.out)
+    out.mkdir(parents=True, exist_ok=True)
+    ex = Explainer(a.model)
+    print("model:", a.model, "| classes:", ex.names)
+
+    if a.images:
+        figure_for(ex, a.images, [""] * len(a.images), a, out / "custom_images.jpg", "Regions used for prediction")
+        return
+
