@@ -161,3 +161,34 @@ def main():
         figure_for(ex, a.images, [""] * len(a.images), a, out / "custom_images.jpg", "Regions used for prediction")
         return
 
+    mean_maps, mean_faces, used = {}, {}, {}
+    for cname in ex.names:
+        files = sorted(f for f in (Path(a.dataset) / a.split / cname).iterdir() if f.suffix.lower() in IMAGE_EXTENSIONS)
+        rng.shuffle(files)
+        figure_for(ex, files[:a.examples_per_class], [cname] * a.examples_per_class, a,
+                   out / f"{cname}_examples.jpg", f"True class: {cname}")
+        # class-average Grad-CAM over correctly classified images
+        acc_map, acc_face, n = np.zeros((a.imgsz, a.imgsz)), np.zeros((a.imgsz, a.imgsz, 3)), 0
+        target = ex.names.index(cname)
+        for i in range(0, min(len(files), a.mean_per_class), 32):
+            x = torch.stack([load(p, a.imgsz) for p in files[i:i + 32]]).cuda()
+            cams, cls, _ = ex.gradcam(x)
+            ok = cls == target
+            acc_map += cams[ok].sum(0)
+            acc_face += x[torch.as_tensor(ok, device=x.device)].permute(0, 2, 3, 1).sum(0).cpu().numpy()
+            n += int(ok.sum())
+        mean_maps[cname], mean_faces[cname], used[cname] = acc_map / max(n, 1), acc_face / max(n, 1), n
+
+    fig, axes = plt.subplots(1, len(ex.names), figsize=(3.1 * len(ex.names), 3.5))
+    for ax, cname in zip(axes, ex.names):
+        m = mean_maps[cname]
+        overlay(ax, mean_faces[cname], m / max(m.max(), 1e-9), f"{cname}\n(mean of {used[cname]} correct faces)")
+    fig.suptitle("Average Grad-CAM per class on the average face - typical region used for each emotion", fontsize=11)
+    fig.tight_layout()
+    fig.savefig(out / "class_mean_gradcam.jpg", dpi=120)
+    plt.close(fig)
+    print("saved", out / "class_mean_gradcam.jpg")
+
+
+if __name__ == "__main__":
+    main()
