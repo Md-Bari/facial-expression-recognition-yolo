@@ -73,3 +73,17 @@ y_corr = np.array([CLASS_NAMES.index(nl) if ac == "relabel" else y
                    for ac, nl, y in zip(action, di.map(corr.new_label).values, yt)])
 keep = action != "remove"
 
+out = {"members_weights": w.to_dict(), "tta": {n: bool(view[n]) for n in w.index},
+       "val_accuracy": acc(cur, yv)}
+for tag, p in (("selected", pt), ("uniform_all_members", pt_all)):
+    out[tag] = {"test_all_original_labels": report(yt, p),
+                "test_audited_subset": report(yt, p, ~ref["flag_test"]),
+                "test_corrected_labels": report(y_corr, p, keep)}
+    print(f"\n[{tag}] TEST accuracy  all original labels {out[tag]['test_all_original_labels']['accuracy']:.4f}"
+          f" | audited subset {out[tag]['test_audited_subset']['accuracy']:.4f}"
+          f" | corrected labels {out[tag]['test_corrected_labels']['accuracy']:.4f}")
+json.dump(out, open(RUNS / "ensemble_metrics.json", "w"), indent=2)
+pd.DataFrame(pt, columns=[f"prob_{c}" for c in CLASS_NAMES]).assign(
+    dataset_idx=ref["dataset_idx_test"], true_label=[CLASS_NAMES[i] for i in yt],
+    predicted_label=[CLASS_NAMES[i] for i in pt.argmax(1)]).to_csv(RUNS / "ensemble_test_predictions.csv", index=False)
+print("saved", RUNS / "ensemble_metrics.json")
