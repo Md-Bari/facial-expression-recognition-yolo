@@ -23,3 +23,31 @@ Usage
 """
 from __future__ import annotations
 
+import argparse
+import random
+import shutil
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+from PIL import Image, ImageEnhance, ImageOps
+
+ROOT = Path(__file__).resolve().parent
+SPLITS = ("train", "val", "test")
+IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
+
+
+def parse_args():
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--dataset", default=str(ROOT / "outputs" / "_shared_work" / "dataset"),
+                    help="source dataset with train/val/test/<class>/ folders")
+    ap.add_argument("--model", default=str(ROOT / "outputs" / "yolo11l" / "runs" / "yolo11l_70_15_15" / "weights" / "best.pt"),
+                    help="trained Ultralytics classification checkpoint used to decide which images are correct")
+    ap.add_argument("--out", default=str(ROOT / "outputs" / "balanced_dataset"))
+    ap.add_argument("--min-per-class", type=int, default=3000)
+    ap.add_argument("--imgsz", type=int, default=256)
+    ap.add_argument("--batch", type=int, default=128)
+    ap.add_argument("--seed", type=int, default=42)
+    ap.add_argument("--overwrite", action="store_true", help="delete --out first if it already exists")
+    return ap.parse_args()
+
