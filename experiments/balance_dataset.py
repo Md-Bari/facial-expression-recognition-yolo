@@ -51,3 +51,21 @@ def parse_args():
     ap.add_argument("--overwrite", action="store_true", help="delete --out first if it already exists")
     return ap.parse_args()
 
+
+def list_images(dataset: Path) -> pd.DataFrame:
+    rows = []
+    for split in SPLITS:
+        for class_dir in sorted(p for p in (dataset / split).iterdir() if p.is_dir()):
+            for f in sorted(class_dir.iterdir()):
+                if f.is_file() and f.suffix.lower() in IMAGE_EXTENSIONS:
+                    rows.append((str(f), split, class_dir.name))
+    if not rows:
+        raise FileNotFoundError(f"No images found under {dataset}")
+    return pd.DataFrame(rows, columns=["path", "split", "label"])
+
+
+def classify(df: pd.DataFrame, model_path: str, imgsz: int, batch: int) -> pd.DataFrame:
+    """Adds predicted label, confidence and correct flag using the trained model."""
+    import torch
+    from ultralytics import YOLO
+
