@@ -69,3 +69,42 @@ def classify(df: pd.DataFrame, model_path: str, imgsz: int, batch: int) -> pd.Da
     import torch
     from ultralytics import YOLO
 
+    model = YOLO(model_path)
+    names = [model.names[i] for i in range(len(model.names))]
+    missing = set(df.label) - set(names)
+    if missing:
+        raise ValueError(f"Dataset classes {sorted(missing)} are not in the model classes {names}")
+    device = 0 if torch.cuda.is_available() else "cpu"
+    preds, confs = [], []
+    paths = df.path.tolist()
+    for start in range(0, len(paths), batch):
+        results = model.predict(paths[start:start + batch], imgsz=imgsz, device=device, batch=batch, verbose=False)
+        preds += [names[r.probs.top1] for r in results]
+        confs += [float(r.probs.top1conf) for r in results]
+        if (start // batch) % 20 == 0:
+            print(f"  classified {min(start + batch, len(paths))}/{len(paths)}", flush=True)
+    out = df.copy()
+    out["predicted"], out["confidence"] = preds, confs
+    out["correct"] = out.predicted == out.label
+    return out
+
+
+def augment(image: Image.Image, rng: random.Random) -> Image.Image:
+    """Label-preserving face augmentation: flip, small rotation, mild zoom/shift, brightness, contrast.
+
+    Every copy gets a rotation and a zoom, so no augmented image is pixel-identical to its source."""
+    image = image.convert("RGB")
+    w, h = image.size
+    if rng.random() < 0.5:
+        image = ImageOps.mirror(image)
+    angle = rng.choice((-1, 1)) * rng.uniform(3.0, 12.0)
+    image = image.rotate(angle, resample=Image.BICUBIC, expand=False, fillcolor=tuple(
+        int(v) for v in np.asarray(image.resize((1, 1), Image.BILINEAR)).reshape(3)))
+    keep = rng.uniform(0.86, 0.96)  # centre-ish crop keeps 86-96 % of each side, then resize back
+    cw, ch = int(w * keep), int(h * keep)
+    left, top = rng.randint(0, w - cw), rng.randint(0, h - ch)
+    image = image.crop((left, top, left + cw, top + ch)).resize((w, h), Image.BICUBIC)
+    image = ImageEnhance.Brightness(image).enhance(rng.uniform(0.8, 1.2))
+    image = ImageEnhance.Contrast(image).enhance(rng.uniform(0.8, 1.2))
+    return image
+
