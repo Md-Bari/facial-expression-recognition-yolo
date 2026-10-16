@@ -108,3 +108,28 @@ def augment(image: Image.Image, rng: random.Random) -> Image.Image:
     image = ImageEnhance.Contrast(image).enhance(rng.uniform(0.8, 1.2))
     return image
 
+
+def main():
+    a = parse_args()
+    rng = random.Random(a.seed)
+    dataset, out = Path(a.dataset), Path(a.out)
+    if out.exists() and any(out.iterdir()):
+        if not a.overwrite:
+            raise SystemExit(f"{out} already exists and is not empty. Pass --overwrite to rebuild it.")
+        shutil.rmtree(out)
+
+    print(f"Model  : {a.model}\nDataset: {dataset}\nOutput : {out}")
+    df = classify(list_images(dataset), a.model, a.imgsz, a.batch)
+    classes = sorted(df.label.unique())
+    correct = df[df.correct].reset_index(drop=True)
+    print(f"\nModel accuracy on the source dataset: {df.correct.mean():.4f} "
+          f"({len(correct)} of {len(df)} images correctly classified)")
+
+    # 1) copy correctly classified images
+    manifest = []
+    for r in correct.itertuples():
+        dst = out / r.split / r.label / Path(r.path).name
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(r.path, dst)
+        manifest.append((str(dst), r.path, r.split, r.label, "original", r.confidence))
+
