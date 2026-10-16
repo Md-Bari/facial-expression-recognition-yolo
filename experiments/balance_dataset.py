@@ -133,3 +133,29 @@ def main():
         shutil.copy2(r.path, dst)
         manifest.append((str(dst), r.path, r.split, r.label, "original", r.confidence))
 
+    # 2) top up classes below the minimum with augmented copies of their correct TRAIN images
+    for cname in classes:
+        have = int((correct.label == cname).sum())
+        need = a.min_per_class - have
+        if need <= 0:
+            print(f"{cname:9s}: {have} correct images >= {a.min_per_class} -> left as is")
+            continue
+        pool = correct[(correct.label == cname) & (correct.split == "train")].path.tolist()
+        if not pool:
+            raise RuntimeError(f"Class {cname} has no correctly classified training image to augment")
+        print(f"{cname:9s}: {have} correct images -> adding {need} augmented copies (from {len(pool)} train images)")
+        # cycle through a shuffled pool so sources are used as evenly as possible
+        order, sources = [], []
+        while len(sources) < need:
+            if not order:
+                order = pool[:]
+                rng.shuffle(order)
+            sources.append(order.pop())
+        used = {}
+        for src in sources:
+            k = used[src] = used.get(src, 0) + 1
+            dst = out / "train" / cname / f"aug{k:02d}_{Path(src).stem}.jpg"
+            with Image.open(src) as im:
+                augment(im, rng).save(dst, quality=95)
+            manifest.append((str(dst), src, "train", cname, "augmented", np.nan))
+
