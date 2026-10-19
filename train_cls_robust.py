@@ -160,3 +160,30 @@ def mix(xb, yb):
         tgt = lam * tgt + (1 - lam) * tgt[perm]
     return xb, tgt
 
+
+# ---------------------------------------------------------------- model
+def new_model():
+    from ultralytics import YOLO
+    from ultralytics.nn.tasks import ClassificationModel
+    yolo = YOLO(a.weights)
+    m = yolo.model
+    ClassificationModel.reshape_outputs(m, NC)
+    m.names = dict(enumerate(CLASS_NAMES))
+    m.nc = NC
+    if isinstance(getattr(m, "yaml", None), dict):
+        m.yaml["nc"] = NC
+    for q in m.parameters():
+        q.requires_grad_(True)
+    for mod in m.modules():
+        if isinstance(mod, torch.nn.Dropout):
+            mod.p = a.dropout
+    return yolo, m.float().cuda()
+
+
+class EMA:
+    def __init__(self, model, decay):
+        self.ema = copy.deepcopy(model).eval()
+        for q in self.ema.parameters():
+            q.requires_grad_(False)
+        self.decay, self.n = decay, 0
+
