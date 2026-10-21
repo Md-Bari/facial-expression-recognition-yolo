@@ -78,3 +78,20 @@ def parse_args():
     ap.add_argument("--name", default="")
     return ap.parse_args()
 
+
+# ----------------------------------------------------------------------------- data
+def build_index(dataset: Path, split_csv: Path) -> pd.DataFrame:
+    rows = []
+    for split in ("train", "val", "test"):
+        for li, cname in enumerate(CLASS_NAMES):
+            for f in sorted((dataset / split / cname).iterdir()):
+                if f.suffix.lower() in {".jpg", ".jpeg", ".png", ".bmp", ".webp"}:
+                    rows.append((str(f), split, li, int(f.name.split("_")[0])))
+    df = pd.DataFrame(rows, columns=["crop_path", "split", "y", "idx"])
+    src = pd.read_csv(split_csv).reset_index().rename(columns={"index": "idx"})
+    df = df.merge(src[["idx", "path", "group", "split", "label"]], on="idx", suffixes=("", "_src"), validate="1:1")
+    assert (df.split == df.split_src).all() and (df.label == df.y.map(lambda i: CLASS_NAMES[i])).all(), \
+        "dataset folder does not match split.csv"
+    return df.drop(columns=["split_src", "label"]).rename(columns={"path": "source_path"})
+
+
