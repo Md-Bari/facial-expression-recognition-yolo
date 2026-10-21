@@ -95,3 +95,24 @@ def build_index(dataset: Path, split_csv: Path) -> pd.DataFrame:
     return df.drop(columns=["split_src", "label"]).rename(columns={"path": "source_path"})
 
 
+def load_image(path_size):
+    path, s = path_size
+    with Image.open(path) as im:
+        im = im.convert("RGB")
+        w, h = im.size
+        r = s / min(w, h)  # same policy as Ultralytics classify val: short side -> s, centre crop
+        nw, nh = max(s, round(w * r)), max(s, round(h * r))
+        im = im.resize((nw, nh), Image.BILINEAR)
+        l, t = (nw - s) // 2, (nh - s) // 2
+        return np.asarray(im.crop((l, t, l + s, t + s)), dtype=np.uint8)
+
+
+def load_all(df: pd.DataFrame, s: int) -> torch.Tensor:
+    t0 = time.time()
+    with ThreadPoolExecutor(12) as ex:
+        arrs = list(ex.map(load_image, [(p, s) for p in df.crop_path]))
+    x = torch.from_numpy(np.stack(arrs)).permute(0, 3, 1, 2).contiguous()  # N,3,S,S uint8
+    print(f"loaded {len(df)} images at {s}px in {time.time() - t0:.0f}s ({x.numel() / 1e9:.1f} GB)", flush=True)
+    return x
+
+
