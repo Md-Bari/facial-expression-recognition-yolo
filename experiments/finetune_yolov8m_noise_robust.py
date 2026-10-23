@@ -116,3 +116,38 @@ def load_all(df: pd.DataFrame, s: int) -> torch.Tensor:
     return x
 
 
+# ----------------------------------------------------------------------------- augmentation (GPU)
+def gpu_augment(xb: torch.Tensor, a) -> torch.Tensor:
+    """xb: B,3,S,S float in [0,1]. Face-safe: mild zoom/aspect/rotation/shift, h-flip, brightness/contrast, erasing."""
+    B, dev = xb.shape[0], xb.device
+    area = torch.empty(B, device=dev).uniform_(a.crop_scale_min, 1.0)
+    logr = torch.empty(B, device=dev).uniform_(math.log(0.85), math.log(1 / 0.85))
+    sx = (area * torch.exp(logr)).sqrt().clamp(max=1.0)
+    sy = (area / torch.exp(logr)).sqrt().clamp(max=1.0)
+    ang = torch.empty(B, device=dev).uniform_(-a.degrees, a.degrees) * math.pi / 180
+    flip = torch.where(torch.rand(B, device=dev) < 0.5, -1.0, 1.0)
+    tx = (torch.rand(B, device=dev) * 2 - 1) * (1 - sx)
+    ty = (torch.rand(B, device=dev) * 2 - 1) * (1 - sy)
+    cos, sin = torch.cos(ang), torch.sin(ang)
+    theta = torch.stack([
+        torch.stack([cos * sx * flip, -sin * sy, tx], 1),
+        torch.stack([sin * sx * flip, cos * sy, ty], 1),
+    ], 1)
+    grid = F.affine_grid(theta, xb.shape, align_corners=False)
+    xb = F.grid_sample(xb, grid, mode="bilinear", padding_mode="reflection", align_corners=False)
+    # photometric
+    c = torch.empty(B, 1, 1, 1, device=dev).uniform_(0.75, 1.25)
+    b = torch.empty(B, 1, 1, 1, device=dev).uniform_(-0.12, 0.12)
+    m = xb.mean(dim=(1, 2, 3), keepdim=True)
+    xb = ((xb - m) * c + m + b).clamp_(0, 1)
+    # random erasing
+    if a.erasing > 0:
+        S = xb.shape[-1]
+        for i in torch.nonzero(torch.rand(B, device=dev) < a.erasing).flatten().tolist():
+            ar = np.random.uniform(0.02, 0.2) * S * S
+            rr = math.exp(np.random.uniform(math.log(0.4), math.log(2.5)))
+            h, w = int(min(S, round(math.sqrt(ar * rr)))), int(min(S, round(math.sqrt(ar / rr))))
+            t, l = np.random.randint(0, S - h + 1), np.random.randint(0, S - w + 1)
+            xb[i, :, t:t + h, l:l + w] = torch.rand(3, 1, 1, device=dev)
+    return xb
+
