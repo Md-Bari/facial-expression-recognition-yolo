@@ -151,3 +151,26 @@ def gpu_augment(xb: torch.Tensor, a) -> torch.Tensor:
             xb[i, :, t:t + h, l:l + w] = torch.rand(3, 1, 1, device=dev)
     return xb
 
+
+def mix(xb, yb, a):
+    """Returns mixed images and soft targets (label smoothing applied)."""
+    tgt = F.one_hot(yb, NC).float() * (1 - a.label_smoothing) + a.label_smoothing / NC
+    r = np.random.rand()
+    if r < a.mixup_prob:
+        lam = np.random.beta(a.mixup_alpha, a.mixup_alpha)
+        perm = torch.randperm(xb.shape[0], device=xb.device)
+        xb = lam * xb + (1 - lam) * xb[perm]
+        tgt = lam * tgt + (1 - lam) * tgt[perm]
+    elif r < a.mixup_prob + a.cutmix_prob:
+        lam = np.random.beta(a.cutmix_alpha, a.cutmix_alpha)
+        perm = torch.randperm(xb.shape[0], device=xb.device)
+        S = xb.shape[-1]
+        h, w = int(S * math.sqrt(1 - lam)), int(S * math.sqrt(1 - lam))
+        t, l = np.random.randint(0, S - h + 1), np.random.randint(0, S - w + 1)
+        xb = xb.clone()
+        xb[:, :, t:t + h, l:l + w] = xb[perm][:, :, t:t + h, l:l + w]
+        lam = 1 - h * w / (S * S)
+        tgt = lam * tgt + (1 - lam) * tgt[perm]
+    return xb, tgt
+
+
