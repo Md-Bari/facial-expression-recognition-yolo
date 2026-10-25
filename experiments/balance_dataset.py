@@ -159,3 +159,24 @@ def main():
                 augment(im, rng).save(dst, quality=95)
             manifest.append((str(dst), src, "train", cname, "augmented", np.nan))
 
+    man = pd.DataFrame(manifest, columns=["path", "source_path", "split", "label", "kind", "model_confidence"])
+    man.to_csv(out / "manifest.csv", index=False)
+
+    counts = pd.DataFrame({
+        "source_total": df.label.value_counts(),
+        "correct": correct.label.value_counts(),
+        "augmented_added": man[man.kind == "augmented"].label.value_counts(),
+        "balanced_total": man.label.value_counts(),
+    }).reindex(classes).fillna(0).astype(int)
+    for s in SPLITS:
+        counts[f"balanced_{s}"] = man[man.split == s].label.value_counts().reindex(classes).fillna(0).astype(int)
+    counts.to_csv(out / "class_counts.csv")
+    print("\n" + counts.to_string())
+    assert (counts.balanced_total >= a.min_per_class).all()
+    on_disk = sum(1 for p in out.rglob("*") if p.is_file() and p.suffix.lower() in IMAGE_EXTENSIONS)
+    assert on_disk == len(man), f"{on_disk} files on disk but {len(man)} in manifest"
+    print(f"\nSaved {len(man)} images to {out}")
+
+
+if __name__ == "__main__":
+    main()
