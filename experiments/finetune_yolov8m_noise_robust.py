@@ -174,3 +174,42 @@ def mix(xb, yb, a):
     return xb, tgt
 
 
+# ----------------------------------------------------------------------------- model
+def new_model(a):
+    from ultralytics import YOLO
+    from ultralytics.nn.tasks import ClassificationModel
+
+    yolo = YOLO(a.weights)
+    m = yolo.model
+    ClassificationModel.reshape_outputs(m, NC)
+    m.names = dict(enumerate(CLASS_NAMES))
+    m.nc = NC
+    if isinstance(getattr(m, "yaml", None), dict):
+        m.yaml["nc"] = NC
+    for p in m.parameters():
+        p.requires_grad_(True)
+    for mod in m.modules():
+        if isinstance(mod, torch.nn.Dropout):
+            mod.p = a.dropout
+    return yolo, m.float().cuda()  # NCHW: channels_last is ~5x slower for this net on this GPU
+
+
+class EMA:
+    def __init__(self, model, decay):
+        self.ema = copy.deepcopy(model).eval()
+        for p in self.ema.parameters():
+            p.requires_grad_(False)
+        self.decay, self.n = decay, 0
+
+    @torch.no_grad()
+    def update(self, model):
+        self.n += 1
+        d = self.decay * (1 - math.exp(-self.n / 500))
+        msd = model.state_dict()
+        for k, v in self.ema.state_dict().items():
+            if v.dtype.is_floating_point:
+                v.mul_(d).add_(msd[k].detach(), alpha=1 - d)
+            else:
+                v.copy_(msd[k])
+
+
