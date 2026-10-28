@@ -218,3 +218,68 @@ def predict(model, idx, flip_tta=False, bs=256):
     return pr.cpu().numpy()
 
 
+# ---------------------------------------------------------------- train
+yolo, model = new_model()
+ema = EMA(model, a.ema_decay)
+decay, no_decay = [], []
+for n, q in model.named_parameters():
+    (no_decay if q.ndim <= 1 else decay).append(q)
+opt = torch.optim.AdamW([{"params": decay, "weight_decay": a.weight_decay},
+                         {"params": no_decay, "weight_decay": 0.0}], lr=a.lr0, betas=(0.9, 0.999))
+scaler = torch.amp.GradScaler("cuda")
+spe = len(tr_clean) // a.batch
+total, warm = a.epochs * spe, int(a.warmup_epochs * spe)
+Yg = torch.as_tensor(Y, device="cuda")
+best_acc, best_state, best_epoch, hist, step = -1.0, None, 0, [], 0
+t0 = t_prev = time.time()
+fastest = float("inf")
+try:
+    for ep in range(1, a.epochs + 1):
+        model.train()
+        perm = np.random.permutation(tr_clean)
+        run_loss = 0.0
+        for bi in range(spe):
+            lr = a.lr0 * (step + 1) / warm if step < warm else \
+                a.lr_min + 0.5 * (a.lr0 - a.lr_min) * (1 + math.cos(math.pi * (step - warm) / max(1, total - warm)))
+            for g in opt.param_groups:
+                g["lr"] = lr
+            ib = perm[bi * a.batch:(bi + 1) * a.batch]
+            xb = gpu_augment(fetch(ib))
+            xb, tgt = mix(xb, Yg[torch.as_tensor(ib, device="cuda")])
+            with torch.autocast("cuda", dtype=torch.float16):
+                logits = model(xb)
+            loss = torch.sum(-tgt * F.log_softmax(logits.float(), 1), 1).mean()
+            opt.zero_grad(set_to_none=True)
+            scaler.scale(loss).backward()
+            scaler.unscale_(opt)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 5.0)
+            scaler.step(opt)
+            scaler.update()
+            ema.update(model)
+            run_loss += loss.item()
+            step += 1
+        pv = predict(ema.ema, va_clean)
+        acc = float((pv.argmax(1) == Y[va_clean]).mean())
+        vloss = float(-np.log(np.clip(pv[np.arange(len(va_clean)), Y[va_clean]], 1e-9, 1)).mean())
+        row = {"epoch": ep, "time": time.time() - t0, "train_loss": run_loss / spe, "lr": lr,
+               "val_acc": acc, "val_loss": vloss}
+        if acc > best_acc:
+            best_acc, best_epoch = acc, ep
+            best_state = copy.deepcopy(ema.ema.state_dict())
+            torch.save(best_state, RUN / "best_ema_state.pt")
+        hist.append(row)
+        dt, t_prev = time.time() - t_prev, time.time()
+        print(f"[{a.name}] " + " ".join(f"{k}={v:.5g}" if isinstance(v, float) else f"{k}={v}"
+                                        for k, v in row.items()) + f" epoch_s={dt:.0f}", flush=True)
+        if ep > 1:
+            fastest = min(fastest, dt)
+            if dt > 2.5 * fastest:
+                print(f"[{a.name}] WARNING: slow epoch - something else is probably using the GPU", flush=True)
+except KeyboardInterrupt:
+    if not hist:
+        raise
+    print(f"[{a.name}] interrupted; keeping best epoch {best_epoch}", flush=True)
+pd.DataFrame(hist).to_csv(RUN / "results.csv", index=False)
+ema.ema.load_state_dict(best_state)
+model = ema.ema
+
