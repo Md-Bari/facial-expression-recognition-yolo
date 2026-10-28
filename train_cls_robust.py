@@ -187,3 +187,34 @@ class EMA:
             q.requires_grad_(False)
         self.decay, self.n = decay, 0
 
+    @torch.no_grad()
+    def update(self, model):
+        self.n += 1
+        d = self.decay * (1 - math.exp(-self.n / 500))
+        msd = model.state_dict()
+        for k, v in self.ema.state_dict().items():
+            if v.dtype.is_floating_point:
+                v.mul_(d).add_(msd[k].detach(), alpha=1 - d)
+            else:
+                v.copy_(msd[k])
+
+
+@torch.no_grad()
+def predict(model, idx, flip_tta=False, bs=256):
+    model.eval()
+    out = []
+    for i in range(0, len(idx), bs):
+        xb = fetch(idx[i:i + bs])
+        with torch.autocast("cuda", dtype=torch.float16):
+            o = model(xb)
+            o = o[0] if isinstance(o, (tuple, list)) else o
+            if flip_tta:
+                o2 = model(xb.flip(-1))
+                o = (o + (o2[0] if isinstance(o2, (tuple, list)) else o2)) / 2
+        out.append(o.float())
+    pr = torch.cat(out)
+    if not torch.allclose(pr.sum(1), torch.ones_like(pr[:, 0]), atol=1e-2):
+        pr = pr.softmax(1)
+    return pr.cpu().numpy()
+
+
