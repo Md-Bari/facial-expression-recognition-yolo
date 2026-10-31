@@ -284,3 +284,19 @@ ema.ema.load_state_dict(best_state)
 model = ema.ema
 
 # ---------------------------------------------------------------- outputs
+np.savez(RUN / "probs.npz",
+         val_idx=idx_va, test_idx=idx_te,
+         val=predict(model, idx_va), val_flip=predict(model, idx_va, flip_tta=True),
+         test=predict(model, idx_te), test_flip=predict(model, idx_te, flip_tta=True),
+         y_val=Y[idx_va], y_test=Y[idx_te], flag_val=flag[idx_va], flag_test=flag[idx_te],
+         dataset_idx_val=df.idx.values[idx_va], dataset_idx_test=df.idx.values[idx_te])
+yolo.model = copy.deepcopy(model).float().cpu()
+yolo.model.names = dict(enumerate(CLASS_NAMES))
+if isinstance(yolo.ckpt, dict):
+    yolo.ckpt.pop("ema", None)
+    yolo.ckpt.pop("optimizer", None)
+yolo.overrides["imgsz"] = a.imgsz
+yolo.save(str(RUN / "weights" / "best.pt"))
+d = np.load(RUN / "probs.npz")
+print(f"[{a.name}] DONE best_epoch={best_epoch} val_acc(all)={(d['val'].argmax(1) == d['y_val']).mean():.4f} "
+      f"minutes={(time.time() - t0) / 60:.1f}", flush=True)
