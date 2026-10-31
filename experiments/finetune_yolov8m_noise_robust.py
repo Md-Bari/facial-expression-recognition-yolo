@@ -213,3 +213,23 @@ class EMA:
                 v.copy_(msd[k])
 
 
+@torch.no_grad()
+def predict(model, X, idx, flip_tta=False, bs=256):
+    """Class probabilities for X[idx] (uint8 tensor on GPU)."""
+    model.eval()
+    out = []
+    for i in range(0, len(idx), bs):
+        xb = X[idx[i:i + bs]].float().div_(255)
+        with torch.autocast("cuda", dtype=torch.float16):
+            o = model(xb)
+            o = o[0] if isinstance(o, (tuple, list)) else o  # eval -> (softmax probs, logits)
+            if flip_tta:
+                o2 = model(xb.flip(-1))
+                o = (o + (o2[0] if isinstance(o2, (tuple, list)) else o2)) / 2
+        out.append(o.float())
+    p = torch.cat(out)
+    if not torch.allclose(p.sum(1), torch.ones_like(p[:, 0]), atol=1e-2):
+        p = p.softmax(1)
+    return p.cpu().numpy()
+
+
