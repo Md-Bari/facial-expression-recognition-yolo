@@ -45,3 +45,64 @@ Test class support (YOLOv8m, 3,231 images): angry 495, fear 325, happy 732, neut
 
 Identical for all four models; only the weights file differs.
 
+| Parameter | Value |
+|-----------|-------|
+| Task / mode | classify / train |
+| Epochs (max) | 60 |
+| Early-stop patience | 15 |
+| Batch size | 32 |
+| Image size (imgsz) | 256 |
+| Optimizer | AdamW |
+| Initial LR (lr0) | 0.0003 |
+| Final LR factor (lrf) | 0.01 |
+| Cosine LR (cos_lr) | True |
+| Momentum | 0.937 |
+| Weight decay | 0.05 |
+| Warm-up epochs | 3 |
+| Warm-up momentum | 0.8 |
+| Warm-up bias LR | 0.1 |
+| Dropout | 0.3 |
+| Nominal batch size (nbs) | 64 |
+| Pretrained | True |
+| AMP (mixed precision) | True |
+| Seed | 42 |
+| Deterministic | False |
+| Device | GPU 0 |
+| Workers | 8 |
+| Cache | RAM |
+| Freeze layers | None |
+| Close mosaic (last N epochs) | 10 |
+| Multi-scale | 0.0 |
+| Validation each epoch | True (split = val) |
+| Loss gains (cls) | 0.5 |
+
+### Augmentation (base runs)
+
+| Parameter | Value |
+|-----------|-------|
+| hsv_h / hsv_s / hsv_v | 0.015 / 0.5 / 0.4 |
+| degrees | 0.0 |
+| translate | 0.1 |
+| scale | 0.3 |
+| shear | 0.0 |
+| perspective | 0.0 |
+| flipud | 0.0 |
+| fliplr | 0.5 |
+| bgr | 0.0 |
+| mosaic | 1.0 |
+| mixup | 0.0 |
+| cutmix | 0.0 |
+| copy_paste | 0.0 |
+| auto_augment | randaugment |
+| erasing | 0.1 |
+
+### Inference / test-time settings
+
+| Parameter | Value |
+|-----------|-------|
+| TTA (flip, inside exported model) | True |
+| Export format (args.yaml) | torchscript; ONNX deployment model also exported |
+| ONNX output | class probabilities |
+
+## 4. Fine-tuning runs (YOLOv8m)
+
