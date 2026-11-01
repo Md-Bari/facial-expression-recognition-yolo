@@ -106,3 +106,37 @@ Identical for all four models; only the weights file differs.
 
 ## 4. Fine-tuning runs (YOLOv8m)
 
+| Parameter | A: 320 px fine-tune | B: 256 px refine |
+|-----------|--------------------|------------------|
+| Start weights | yolov8m-cls.pt (COCO/ImageNet pretrained) | best.pt of YOLOv8m base run |
+| Epochs (max) | 100 | 40 |
+| Patience | 20 | 10 |
+| Batch size | 16 | 32 |
+| Image size | 320 | 256 |
+| Optimizer | AdamW | AdamW |
+| lr0 | 0.00015 | 0.00005 |
+| lrf | 0.01 | 0.1 |
+| Cosine LR | True | True |
+| Weight decay | 0.03 | 0.05 |
+| Warm-up epochs | 3 | 3 |
+| Dropout | 0.35 | 0.3 |
+| hsv_h / hsv_s / hsv_v | 0.015 / 0.7 / 0.4 | 0.015 / 0.5 / 0.4 |
+| translate | 0.1 | 0.1 |
+| scale | 0.5 | 0.3 |
+| fliplr | 0.5 | 0.5 |
+| mixup / cutmix | 0.0 / 0.0 | 0.0 / 0.0 |
+| auto_augment | randaugment | randaugment |
+| erasing | 0.1 | 0.1 |
+| close_mosaic | 10 | 10 |
+| Freeze | None | None |
+| Seed | 42 | 42 |
+| Flip-TTA selected on validation | Yes | No |
+| Epochs run | 73 | 40 |
+| Best epoch (val top-1) | 50 (0.90439) | 31 (0.91058) |
+| Training time (last epoch timestamp) | 4893.9 s (~81.6 min) | 2077.0 s (~34.6 min) |
+| Final train loss | 0.03322 | 0.02624 |
+| Final val loss | 0.47278 | 0.50988 |
+| Target test accuracy | 0.95 (not achieved) | 0.95 (not achieved) |
+
+## 5. Training outcome per model (base runs)
+
