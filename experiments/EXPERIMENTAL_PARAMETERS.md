@@ -140,3 +140,23 @@ Identical for all four models; only the weights file differs.
 
 ## 5. Training outcome per model (base runs)
 
+| Model | Epochs run | Best epoch | Train time (min) | Final train loss | Final val loss | Final val top-1 | Final val top-5 |
+|-------|-----------|-----------|------------------|------------------|----------------|-----------------|-----------------|
+| YOLO11s | 56 | 55 | 12.1 | 0.04719 | 0.44343 | 0.90337 | 0.99844 |
+| YOLO11m | 49 | 39 | 13.4 | 0.04292 | 0.46718 | 0.89882 | 0.99722 |
+| YOLO11l | 60 | 47 | 20.3 | 0.02993 | 0.46014 | 0.90687 | 0.99907 |
+| YOLOv8m | 44 | 29 | 10.0 | 0.03887 | 0.47354 | 0.90563 | 0.99814 |
+
+(Best epoch for YOLO11s is 55 in metrics.json; epochs_run 56.)
+
+## 6. Results – accuracy and macro-F1
+
+| Model | Train acc | Val acc | Test acc | Test macro-F1 | Test 95% CI | ONNX test acc | ms/image |
+|-------|-----------|---------|----------|---------------|-------------|---------------|----------|
+| YOLO11s | 0.9991 | 0.9074 | 0.8947 | 0.8839 | 0.884–0.906 | 0.8916 | 8.27 |
+| YOLO11m | 0.9971 | 0.9072 | 0.8969 | 0.8914 | 0.887–0.907 | 0.8997 | 8.80 |
+| YOLO11l | 0.9995 | 0.9121 | 0.9068 | 0.9013 | 0.897–0.917 | 0.9059 | 9.00 |
+| YOLOv8m | 0.9978 | 0.9109 | 0.9056 | 0.9013 | 0.895–0.916 | 0.9019 | 5.65 |
+| YOLOv8m fine-tune A (320) | – | 0.9066 (flip-TTA) / 0.9038 (single) | 0.9006 | 0.8967 | 0.890–0.910 | – | – |
+| YOLOv8m fine-tune B (256) | – | 0.9106 (single) / 0.9097 (flip-TTA) | 0.9025 | 0.8972 | 0.892–0.912 | – | – |
+
