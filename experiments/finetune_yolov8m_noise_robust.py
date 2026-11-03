@@ -233,3 +233,59 @@ def predict(model, X, idx, flip_tta=False, bs=256):
     return p.cpu().numpy()
 
 
+def train_one(a, X, Y, tr_idx, epochs, val_idx=None, tag=""):
+    """Returns (yolo wrapper, best/final EMA model, history). Selects best epoch on val_idx if given."""
+    yolo, model = new_model(a)
+    ema = EMA(model, a.ema_decay)
+    decay, no_decay = [], []
+    for n, p in model.named_parameters():
+        (no_decay if p.ndim <= 1 else decay).append(p)
+    opt = torch.optim.AdamW([{"params": decay, "weight_decay": a.weight_decay},
+                             {"params": no_decay, "weight_decay": 0.0}], lr=a.lr0, betas=(0.9, 0.999))
+    scaler = torch.amp.GradScaler("cuda")
+    steps_per_epoch = len(tr_idx) // a.batch
+    total, warm = epochs * steps_per_epoch, int(a.warmup_epochs * steps_per_epoch)
+    tr = torch.as_tensor(tr_idx, device="cuda")
+    Yg = torch.as_tensor(Y, device="cuda")
+    best_acc, best_state, best_epoch, hist, step = -1.0, None, 0, [], 0
+    t0 = time.time()
+    for ep in range(1, epochs + 1):
+        model.train()
+        perm = tr[torch.randperm(len(tr), device="cuda")]
+        run_loss = 0.0
+        for bi in range(steps_per_epoch):  # drop last
+            lr = a.lr0 * (step + 1) / warm if step < warm else \
+                a.lr_min + 0.5 * (a.lr0 - a.lr_min) * (1 + math.cos(math.pi * (step - warm) / max(1, total - warm)))
+            for g in opt.param_groups:
+                g["lr"] = lr
+            ib = perm[bi * a.batch:(bi + 1) * a.batch]
+            xb = gpu_augment(X[ib].float().div_(255), a)
+            xb, tgt = mix(xb, Yg[ib], a)
+            with torch.autocast("cuda", dtype=torch.float16):
+                logits = model(xb)
+            loss = torch.sum(-tgt * F.log_softmax(logits.float(), 1), 1).mean()
+            opt.zero_grad(set_to_none=True)
+            scaler.scale(loss).backward()
+            scaler.unscale_(opt)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 5.0)
+            scaler.step(opt)
+            scaler.update()
+            ema.update(model)
+            run_loss += loss.item()
+            step += 1
+        row = {"epoch": ep, "time": time.time() - t0, "train_loss": run_loss / steps_per_epoch, "lr": lr}
+        if val_idx is not None:
+            pv = predict(ema.ema, X, val_idx)
+            acc = float((pv.argmax(1) == Y[val_idx]).mean())
+            vloss = float(-np.log(np.clip(pv[np.arange(len(val_idx)), Y[val_idx]], 1e-9, 1)).mean())
+            row.update(val_acc=acc, val_loss=vloss)
+            if acc > best_acc:
+                best_acc, best_epoch = acc, ep
+                best_state = copy.deepcopy(ema.ema.state_dict())
+        hist.append(row)
+        print(f"[{tag}] " + " ".join(f"{k}={v:.5g}" if isinstance(v, float) else f"{k}={v}" for k, v in row.items()),
+              flush=True)
+    if best_state is not None:
+        ema.ema.load_state_dict(best_state)
+    return yolo, ema.ema, pd.DataFrame(hist), best_epoch
+
