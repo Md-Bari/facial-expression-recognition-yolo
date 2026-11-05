@@ -289,3 +289,4 @@ def train_one(a, X, Y, tr_idx, epochs, val_idx=None, tag=""):
         ema.ema.load_state_dict(best_state)
     return yolo, ema.ema, pd.DataFrame(hist), best_epoch
 
+
