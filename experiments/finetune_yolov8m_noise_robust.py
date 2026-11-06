@@ -290,3 +290,36 @@ def train_one(a, X, Y, tr_idx, epochs, val_idx=None, tag=""):
     return yolo, ema.ema, pd.DataFrame(hist), best_epoch
 
 
+# ----------------------------------------------------------------------------- audit
+def confident_learning_flags(P: np.ndarray, Y: np.ndarray):
+    """Confident-learning rule (Northcutt et al., 2021): flag i when its given label is below that class's
+    mean self-confidence threshold AND another class is at/above its own threshold."""
+    thr = np.array([P[Y == k, k].mean() for k in range(NC)])
+    above = P >= thr[None]
+    above[np.arange(len(Y)), Y] = False
+    masked = np.where(above, P, -1.0)
+    sugg = masked.argmax(1)
+    flag = above.any(1) & (P[np.arange(len(Y)), Y] < thr[Y])
+    return flag, sugg, thr
+
+
+def contact_sheet(df, path, n=96, cols=12, s=128):
+    df = df.head(n)
+    rows = max(1, (len(df) + cols - 1) // cols)
+    canvas = Image.new("RGB", (cols * s, rows * (s + 26)), "white")
+    d = ImageDraw.Draw(canvas)
+    for i, r in enumerate(df.itertuples()):
+        im = Image.open(r.crop_path).convert("RGB").resize((s, s))
+        x, y = (i % cols) * s, (i // cols) * (s + 26)
+        canvas.paste(im, (x, y))
+        d.text((x + 2, y + s + 1), f"label: {r.given_label}", fill="green")
+        d.text((x + 2, y + s + 13), f"oof: {r.suggested_label} {r.oof_prob_suggested:.2f}", fill="red")
+    canvas.save(path, quality=88)
+
+
+def wilson(acc, n, z=1.959963984540054):
+    den = 1 + z * z / n
+    c = (acc + z * z / (2 * n)) / den
+    h = z * math.sqrt(acc * (1 - acc) / n + z * z / (4 * n * n)) / den
+    return [c - h, c + h]
+
