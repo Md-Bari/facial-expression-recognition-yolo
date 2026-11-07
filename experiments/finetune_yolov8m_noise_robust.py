@@ -323,3 +323,33 @@ def wilson(acc, n, z=1.959963984540054):
     h = z * math.sqrt(acc * (1 - acc) / n + z * z / (4 * n * n)) / den
     return [c - h, c + h]
 
+
+def report(y, p, mask=None):
+    if mask is not None:
+        y, p = y[mask], p[mask]
+    pred = p.argmax(1)
+    acc = float((pred == y).mean())
+    cm = confusion_matrix(y, pred, labels=np.arange(NC))
+    return {
+        "images": int(len(y)),
+        "accuracy": acc,
+        "macro_f1": float(f1_score(y, pred, average="macro")),
+        "accuracy_wilson_95_ci": wilson(acc, len(y)),
+        "per_class_accuracy": {c: float(cm[i, i] / max(1, cm[i].sum())) for i, c in enumerate(CLASS_NAMES)},
+        "confusion_matrix": cm.tolist(),
+        "classification_report": classification_report(y, pred, labels=np.arange(NC), target_names=CLASS_NAMES,
+                                                       output_dict=True, zero_division=0),
+    }
+
+
+# ----------------------------------------------------------------------------- main
+def main():
+    a = parse_args()
+    torch.manual_seed(a.seed)
+    np.random.seed(a.seed)
+    torch.backends.cudnn.benchmark = True
+    run_dir = Path(a.out) / (a.name or time.strftime("yolov8m_noise_robust_%Y%m%d_%H%M%S"))
+    run_dir.mkdir(parents=True, exist_ok=True)
+    json.dump(vars(a), open(run_dir / "args.json", "w"), indent=2)
+    print("run dir:", run_dir, flush=True)
+
