@@ -160,3 +160,26 @@ Identical for all four models; only the weights file differs.
 | YOLOv8m fine-tune A (320) | – | 0.9066 (flip-TTA) / 0.9038 (single) | 0.9006 | 0.8967 | 0.890–0.910 | – | – |
 | YOLOv8m fine-tune B (256) | – | 0.9106 (single) / 0.9097 (flip-TTA) | 0.9025 | 0.8972 | 0.892–0.912 | – | – |
 
+Validation macro-F1 (base runs): YOLO11s 0.9002, YOLO11m 0.9016, YOLO11l 0.9065, YOLOv8m 0.9062.
+Train macro-F1: YOLO11s 0.9991, YOLO11m 0.9972, YOLO11l 0.9995, YOLOv8m 0.9976.
+
+## 7. Per-class test accuracy
+
+| Model | angry | fear | happy | neutral | sad | surprise |
+|-------|-------|------|-------|---------|-----|----------|
+| YOLO11s | 0.8730 | 0.7715 | 0.9508 | 0.8973 | 0.9140 | 0.8815 |
+| YOLO11m | 0.8970 | 0.8338 | 0.9481 | 0.8989 | 0.8803 | 0.8790 |
+| YOLO11l | 0.9051 | 0.8431 | 0.9508 | 0.9101 | 0.8988 | 0.8898 |
+| YOLOv8m | 0.8869 | 0.8738 | 0.9563 | 0.8989 | 0.8904 | 0.8963 |
+| YOLOv8m fine-tune A | 0.8889 | 0.8738 | 0.9495 | 0.8957 | 0.8769 | 0.8920 |
+| YOLOv8m fine-tune B | 0.9010 | 0.8338 | 0.9440 | 0.8973 | 0.9022 | 0.8942 |
+
+## 8. Per-class accuracy – validation split (base runs)
+
+| Model | angry | fear | happy | neutral | sad | surprise |
+|-------|-------|------|-------|---------|-----|----------|
+| YOLO11s | 0.8848 | 0.8416 | 0.9590 | 0.9069 | 0.9020 | 0.9006 |
+| YOLO11m | 0.8770 | 0.8554 | 0.9672 | 0.9181 | 0.8885 | 0.8901 |
+| YOLO11l | 0.8810 | 0.8646 | 0.9699 | 0.9246 | 0.8936 | 0.8944 |
+| YOLOv8m | 0.8669 | 0.8738 | 0.9781 | 0.9085 | 0.8936 | 0.9030 |
+
