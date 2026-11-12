@@ -359,3 +359,40 @@ def main():
     split = df.split.values
     idx_tr, idx_va, idx_te = (np.where(split == s)[0] for s in ("train", "val", "test"))
 
+    # ---- stage 1: out-of-fold label audit
+    if a.no_audit:
+        flag = np.zeros(len(df), bool)
+    elif a.audit_csv:
+        au = pd.read_csv(a.audit_csv).set_index("idx")
+        flag = df.idx.map(au.flagged).fillna(False).values.astype(bool)
+        print(f"reusing audit {a.audit_csv}: {flag.sum()} flagged", flush=True)
+    else:
+        P = np.zeros((len(df), NC), np.float32)
+        skf = StratifiedGroupKFold(n_splits=a.folds, shuffle=True, random_state=a.seed)
+        for k, (tr, ho) in enumerate(skf.split(np.zeros(len(df)), Y, groups=df.group.values)):
+            _, m, _, _ = train_one(a, X, Y, tr, a.oof_epochs, val_idx=None, tag=f"oof{k}")
+            P[ho] = predict(m, X, ho, flip_tta=True)
+            print(f"[oof{k}] held-out acc = {(P[ho].argmax(1) == Y[ho]).mean():.4f}", flush=True)
+            del m
+            torch.cuda.empty_cache()
+        flag, sugg, thr = confident_learning_flags(P, Y)
+        audit = pd.DataFrame({
+            "idx": df.idx, "crop_path": df.crop_path, "source_path": df.source_path, "split": df.split,
+            "given_label": [CLASS_NAMES[i] for i in Y], "oof_pred": [CLASS_NAMES[i] for i in P.argmax(1)],
+            "oof_prob_given": P[np.arange(len(Y)), Y], "flagged": flag,
+            "suggested_label": np.where(flag, np.array(CLASS_NAMES)[sugg], ""),
+            "oof_prob_suggested": np.where(flag, P[np.arange(len(Y)), sugg], np.nan),
+        })
+        for i, c in enumerate(CLASS_NAMES):
+            audit[f"oof_p_{c}"] = P[:, i]
+        audit.to_csv(run_dir / "label_audit.csv", index=False)
+        print("OOF accuracy (all images):", float((P.argmax(1) == Y).mean()), flush=True)
+        print("class thresholds:", dict(zip(CLASS_NAMES, thr.round(3))), flush=True)
+        print(audit.groupby("split").flagged.agg(["sum", "mean"]), flush=True)
+        print(audit.groupby("given_label").flagged.agg(["sum", "mean"]), flush=True)
+        for s in ("val", "test", "train"):
+            sub = audit[(audit.split == s) & audit.flagged].sort_values("oof_prob_suggested", ascending=False)
+            contact_sheet(sub, run_dir / f"flagged_{s}_most_confident.jpg")
+            if len(sub) > 96:
+                contact_sheet(sub.sample(96, random_state=0), run_dir / f"flagged_{s}_random.jpg")
+
