@@ -353,3 +353,9 @@ def main():
     json.dump(vars(a), open(run_dir / "args.json", "w"), indent=2)
     print("run dir:", run_dir, flush=True)
 
+    df = build_index(Path(a.dataset), Path(a.split_csv))
+    X = load_all(df, a.imgsz).cuda()
+    Y = df.y.values.astype(np.int64)
+    split = df.split.values
+    idx_tr, idx_va, idx_te = (np.where(split == s)[0] for s in ("train", "val", "test"))
+
