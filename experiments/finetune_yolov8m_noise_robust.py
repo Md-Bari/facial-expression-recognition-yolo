@@ -396,3 +396,17 @@ def main():
             if len(sub) > 96:
                 contact_sheet(sub.sample(96, random_state=0), run_dir / f"flagged_{s}_random.jpg")
 
+    # ---- stage 2: final model
+    tr_clean = idx_tr[~flag[idx_tr]]
+    va_clean = idx_va[~flag[idx_va]]
+    print(f"final fit: train {len(idx_tr)} -> {len(tr_clean)} | val for selection {len(idx_va)} -> {len(va_clean)}",
+          flush=True)
+    yolo, model, hist, best_epoch = train_one(a, X, Y, tr_clean, a.epochs, val_idx=va_clean, tag="final")
+    hist.to_csv(run_dir / "results.csv", index=False)
+
+    pv, pv_f = predict(model, X, idx_va), predict(model, X, idx_va, flip_tta=True)
+    acc = lambda p, idx, m=None: float((p.argmax(1) == Y[idx])[m if m is not None else slice(None)].mean())
+    vmask, tmask = ~flag[idx_va], ~flag[idx_te]
+    use_tta = acc(pv_f, idx_va, vmask) > acc(pv, idx_va, vmask)
+    pt = predict(model, X, idx_te, flip_tta=use_tta)
+
