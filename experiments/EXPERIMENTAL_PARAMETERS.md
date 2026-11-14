@@ -211,3 +211,20 @@ Order: angry, fear, happy, neutral, sad, surprise.
 | sad | 9 | 7 | 8 | 47 | 520 | 2 |
 | surprise | 4 | 28 | 7 | 8 | 3 | 413 |
 
+**B: 256 px refine**
+
+| true \ pred | angry | fear | happy | neutral | sad | surprise |
+|---|---|---|---|---|---|---|
+| angry | 446 | 11 | 5 | 13 | 19 | 1 |
+| fear | 8 | 271 | 6 | 3 | 18 | 19 |
+| happy | 4 | 3 | 691 | 26 | 6 | 2 |
+| neutral | 9 | 7 | 15 | 559 | 26 | 7 |
+| sad | 9 | 6 | 8 | 33 | 535 | 2 |
+| surprise | 5 | 21 | 7 | 13 | 3 | 414 |
+
+## 11. Notes
+
+- Baseline reference test accuracy for fine-tuning: 0.9056 (YOLOv8m). The 0.95 target was not reached by either fine-tune run.
+- Best test accuracy overall: YOLO11l (0.9068); best test macro-F1: YOLO11l and YOLOv8m (0.9013); fastest inference: YOLOv8m (5.65 ms/image); smallest model: YOLO11s (5.45 M params, 11.0 MB).
+- Each model's split has its own `split_sig.txt` hash (YOLO11s 753226a79987, YOLOv8m 2e15519ea4e6, YOLO11m/YOLO11l a72e3ee231da); the shared crop dataset signature is a72e3ee231da.
+- A separate ONNX correct-image analysis for YOLO11s exists in `outputs/yolo11s/correct_onnx/` (test per-class ONNX accuracy: angry 0.861, fear 0.772, happy 0.952, neutral 0.886, sad 0.917, surprise 0.881).
