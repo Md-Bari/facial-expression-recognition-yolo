@@ -432,3 +432,33 @@ def main():
     metrics["target_achieved_audited_subset"] = metrics["test_audited_subset"]["accuracy"] >= 0.95
     json.dump(metrics, open(run_dir / "metrics.json", "w"), indent=2)
 
+    te = df.iloc[idx_te]
+    pred = pd.DataFrame({"path": te.crop_path.values, "true_label": [CLASS_NAMES[i] for i in Y[idx_te]],
+                         "predicted_label": [CLASS_NAMES[i] for i in pt.argmax(1)], "confidence": pt.max(1),
+                         "flagged_by_label_audit": flag[idx_te]})
+    for i, c in enumerate(CLASS_NAMES):
+        pred[f"prob_{c}"] = pt[:, i]
+    pred.to_csv(run_dir / "test_predictions.csv", index=False)
+    pd.DataFrame(metrics["test_all_original_labels"]["confusion_matrix"], index=CLASS_NAMES,
+                 columns=CLASS_NAMES).to_csv(run_dir / "test_confusion_matrix.csv")
+
+    # ---- save an Ultralytics-loadable checkpoint: YOLO(best.pt).predict(..., imgsz=256)
+    (run_dir / "weights").mkdir(exist_ok=True)
+    yolo.model = model.float().cpu()
+    yolo.model.names = dict(enumerate(CLASS_NAMES))
+    if isinstance(yolo.ckpt, dict):
+        yolo.ckpt.pop("ema", None)
+        yolo.ckpt.pop("optimizer", None)
+    yolo.overrides["imgsz"] = a.imgsz
+    yolo.save(str(run_dir / "weights" / "best.pt"))
+
+    t, s = metrics["test_all_original_labels"], metrics["test_audited_subset"]
+    print(f"\nbest epoch {best_epoch} | flip TTA: {use_tta}")
+    print("validation:", json.dumps(metrics["validation"]))
+    print(f"TEST all original labels : acc {t['accuracy']:.4f}  macro-F1 {t['macro_f1']:.4f}  n={t['images']}")
+    print(f"TEST audited subset      : acc {s['accuracy']:.4f}  macro-F1 {s['macro_f1']:.4f}  n={s['images']}")
+    print("saved:", run_dir, flush=True)
+
+
+if __name__ == "__main__":
+    main()
