@@ -410,3 +410,25 @@ def main():
     use_tta = acc(pv_f, idx_va, vmask) > acc(pv, idx_va, vmask)
     pt = predict(model, X, idx_te, flip_tta=use_tta)
 
+    metrics = {
+        "model": "yolov8m-cls", "init_weights": a.weights, "img_size": a.imgsz, "best_epoch": int(best_epoch),
+        "epochs_run": int(len(hist)), "train_minutes": float(hist.time.iloc[-1] / 60),
+        "flip_tta_selected_on_validation": bool(use_tta),
+        "train_images_used": int(len(tr_clean)), "train_images_flagged_removed": int(len(idx_tr) - len(tr_clean)),
+        "validation": {
+            "all_labels_single_view": acc(pv, idx_va), "all_labels_flip_tta": acc(pv_f, idx_va),
+            "audited_single_view": acc(pv, idx_va, vmask), "audited_flip_tta": acc(pv_f, idx_va, vmask),
+            "flagged": int((~vmask).sum()),
+        },
+        "test_all_original_labels": report(Y[idx_te], pt),
+        "test_audited_subset": report(Y[idx_te], pt, tmask),
+        "test_flagged_excluded": int((~tmask).sum()),
+        "note": "test_all_original_labels is the only figure comparable with earlier runs. test_audited_subset "
+                "excludes test images flagged by out-of-fold confident learning (models that never trained on "
+                "them); flagged images were not human-verified, so treat it as an optimistic estimate.",
+        "baseline_test_accuracy": 0.9056, "target_test_accuracy": 0.95,
+    }
+    metrics["target_achieved_all_original_labels"] = metrics["test_all_original_labels"]["accuracy"] >= 0.95
+    metrics["target_achieved_audited_subset"] = metrics["test_audited_subset"]["accuracy"] >= 0.95
+    json.dump(metrics, open(run_dir / "metrics.json", "w"), indent=2)
+
